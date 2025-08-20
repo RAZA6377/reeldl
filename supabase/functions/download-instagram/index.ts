@@ -1,61 +1,69 @@
-import { serve } from "https://deno.land/std@0.168.0/http/server.ts"
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+// functions/download-instagram/index.ts
+
+import { serve } from "https://deno.land/std@0.177.0/http/server.ts";
 
 const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers":
+    "authorization, x-client-info, apikey, content-type",
+};
 
-interface DownloadRequest {
-  url: string
-  saveType: 'reel' | 'audio'
-  fileName: string
-}
-
-serve(async (req) => {
-  // Handle CORS preflight requests
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+serve(async (req: Request) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
   }
 
   try {
-    const { url, saveType, fileName }: DownloadRequest = await req.json()
-    
-    console.log('Received request:', { url, saveType, fileName })
+    const { url, saveType } = await req.json();
 
-    // Validate Instagram URL
-    if (!url.includes('instagram.com') || (!url.includes('/reel/') && !url.includes('/p/'))) {
-      throw new Error('Invalid Instagram URL')
+    if (!url) {
+      return new Response(
+        JSON.stringify({ error: "No URL provided" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 400 },
+      );
     }
 
-    // For now, return a mock response since we don't have a real Instagram downloader
-    // In production, you'd integrate with a real Instagram download service
-    const mockDownloadUrl = `https://example.com/mock-${saveType}-${Date.now()}.${saveType === 'audio' ? 'mp3' : 'mp4'}`
-    
+    // Call free Instagram downloader API
+    const targetUrl = `https://api.bhawanigarg.com/social/instagram/?url=${encodeURIComponent(url)}`;
+    const resp = await fetch(targetUrl);
+
+    if (!resp.ok) {
+      return new Response(
+        JSON.stringify({ error: "Failed to fetch from Instagram API" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 },
+      );
+    }
+
+    const data = await resp.json();
+    console.log("API response:", data);
+
+    // Attempt to find a valid media URL
+    const videoUrl = data.url || data.video || data.downloadUrl;
+    if (!videoUrl) {
+      return new Response(
+        JSON.stringify({ error: "No downloadable media found" }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 404 },
+      );
+    }
+
+    // Generate file name
+    const fileName = `reel_${Date.now()}.${saveType === "audio" ? "mp3" : "mp4"}`;
+
     return new Response(
       JSON.stringify({
         success: true,
-        fileName: `${fileName}.${saveType === 'audio' ? 'mp3' : 'mp4'}`,
-        downloadUrl: mockDownloadUrl,
-        message: `${saveType === 'audio' ? 'Audio' : 'Video'} processing started! (Mock response)`
+        fileName,
+        downloadUrl: videoUrl,
+        message: "Download ready!",
       }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 200,
-      }
-    )
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 },
+    );
 
   } catch (error) {
-    console.error('Download error:', error)
+    console.error("Error:", error);
     return new Response(
-      JSON.stringify({
-        success: false,
-        error: error.message || 'Failed to download Instagram content'
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 400,
-      }
-    )
+      JSON.stringify({ error: error.message || "Unknown error" }),
+      { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 },
+    );
   }
-})
+});
