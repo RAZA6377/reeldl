@@ -49,6 +49,8 @@ export const InstagramDownloader = () => {
     setIsLoading(true);
     
     try {
+      console.log('Attempting to call Supabase function with:', { url, saveType, fileName });
+      
       const { data, error } = await supabase.functions.invoke('download-instagram', {
         body: {
           url,
@@ -57,11 +59,14 @@ export const InstagramDownloader = () => {
         }
       });
 
+      console.log('Supabase function response:', { data, error });
+
       if (error) {
+        console.error('Supabase function error:', error);
         throw error;
       }
 
-      if (data.success) {
+      if (data && data.success) {
         setDownloadUrl(data.downloadUrl);
         toast({
           title: "Download Complete!",
