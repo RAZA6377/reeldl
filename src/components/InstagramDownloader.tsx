@@ -6,8 +6,9 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Download, Music, Video, Instagram, Sparkles } from "lucide-react";
+import { Download, Music, Video, Instagram, Sparkles, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { supabase } from "@/integrations/supabase/client";
 
 export const InstagramDownloader = () => {
   const [url, setUrl] = useState("");
@@ -16,6 +17,7 @@ export const InstagramDownloader = () => {
   const [fileName, setFileName] = useState("");
   const [directory, setDirectory] = useState("Downloads");
   const [isLoading, setIsLoading] = useState(false);
+  const [downloadUrl, setDownloadUrl] = useState("");
   const { toast } = useToast();
 
   const handleDownloadClick = () => {
@@ -46,20 +48,53 @@ export const InstagramDownloader = () => {
   const handleConfirmDownload = async () => {
     setIsLoading(true);
     
-    // Simulate download process
-    setTimeout(() => {
-      setIsLoading(false);
-      setShowOptions(false);
-      toast({
-        title: "Download Started",
-        description: `${saveType === "audio" ? "Audio" : "Reel"} download initiated for ${fileName}`,
+    try {
+      const { data, error } = await supabase.functions.invoke('download-instagram', {
+        body: {
+          url,
+          saveType,
+          fileName: fileName || `instagram_${saveType}_${Date.now()}`
+        }
       });
-      
-      // Reset form
-      setUrl("");
-      setFileName("");
-      setSaveType("reel");
-    }, 2000);
+
+      if (error) {
+        throw error;
+      }
+
+      if (data.success) {
+        setDownloadUrl(data.downloadUrl);
+        toast({
+          title: "Download Complete!",
+          description: `${data.fileName} is ready for download`,
+        });
+        
+        // Auto-download the file
+        const link = document.createElement('a');
+        link.href = data.downloadUrl;
+        link.download = data.fileName;
+        link.click();
+        
+        // Reset form
+        setUrl("");
+        setFileName("");
+        setSaveType("reel");
+        setTimeout(() => {
+          setDownloadUrl("");
+          setShowOptions(false);
+        }, 3000);
+      } else {
+        throw new Error(data.error || 'Download failed');
+      }
+    } catch (error) {
+      console.error('Download error:', error);
+      toast({
+        title: "Download Failed",
+        description: error.message || "Failed to download Instagram content. Please try again.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -175,6 +210,22 @@ export const InstagramDownloader = () => {
               </Select>
             </div>
 
+            {downloadUrl && (
+              <div className="p-4 bg-accent/20 rounded-lg border border-border/50">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-muted-foreground">File ready for download</span>
+                  <Button
+                    variant="outline" 
+                    size="sm"
+                    onClick={() => window.open(downloadUrl, '_blank')}
+                  >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    Open File
+                  </Button>
+                </div>
+              </div>
+            )}
+
             <div className="flex gap-3 pt-4">
               <Button
                 variant="outline"
@@ -192,7 +243,7 @@ export const InstagramDownloader = () => {
                 {isLoading ? (
                   <div className="flex items-center gap-2">
                     <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                    Downloading...
+                    Processing...
                   </div>
                 ) : (
                   <>
