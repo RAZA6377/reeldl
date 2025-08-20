@@ -39,20 +39,6 @@ jobs:
     # 🔎 Debug: show repo structure
     - name: Debug – List files
       run: ls -R
-
-    # 🔥 Fix invalid Lovable App ID automatically
-    - name: Fix Capacitor App ID
-      run: |
-        echo "Fixing invalid App ID..."
-        FILE=$(find . -name "capacitor.config.json" | head -n 1)
-        if [ -z "$FILE" ]; then
-          echo "❌ capacitor.config.json not found!"
-          exit 1
-        fi
-        sed -i 's/"appId": "app.lovable.*"/"appId": "com.lovable.reelysaveit"/' "$FILE"
-        sed -i 's/"appName": ".*"/"appName": "Reely Save It"/' "$FILE"
-        echo "✅ Patched App ID and App Name in $FILE"
-        cat "$FILE"
       
     - name: Add Android platform
       run: npx cap add android
