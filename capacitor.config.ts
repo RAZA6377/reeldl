@@ -1,7 +1,7 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'app.lovable.63fdca1d36cc498bafe5b129a97e9f14',
+  appId: 'com.loveable.reel',
   appName: 'reely-save-it',
   webDir: 'dist',
   server: {
