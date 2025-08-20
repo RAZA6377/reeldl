@@ -35,6 +35,13 @@ jobs:
       
     - name: Build web assets
       run: npm run build
+
+    # 🔥 Fix invalid Lovable App ID before Capacitor command
+    - name: Fix Capacitor App ID
+      run: |
+        echo "Fixing invalid App ID..."
+        sed -i 's/"appId": "app.lovable.*"/"appId": "com.lovable.reelysaveit"/' capacitor.config.json
+        cat capacitor.config.json
       
     - name: Add Android platform
       run: npx cap add android
