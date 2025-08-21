@@ -24,123 +24,142 @@ function extractShortcode(url: string): string | null {
   return null;
 }
 
-// Get Instagram media info directly from Instagram
+// Working Instagram scraper using multiple methods
 async function getInstagramMediaInfo(shortcode: string): Promise<any> {
+  console.log(`Starting extraction for shortcode: ${shortcode}`);
+  
+  // Method 1: Try Instagram oEmbed API (most reliable)
   try {
-    // Method 1: Try Instagram's GraphQL endpoint
-    const graphqlUrl = `https://www.instagram.com/graphql/query/`;
-    const variables = {
-      shortcode: shortcode,
-      child_comment_count: 3,
-      fetch_comment_count: 40,
-      parent_comment_count: 24,
-      has_threaded_comments: true
-    };
+    const embedUrl = `https://api.instagram.com/oembed/?url=https://www.instagram.com/p/${shortcode}/`;
+    console.log("Trying Instagram oEmbed API...");
     
-    const queryHash = "b3055c01b4b222b8a47dc12b090e4e64"; // This changes periodically
-    
-    const response = await fetch(`${graphqlUrl}?query_hash=${queryHash}&variables=${JSON.stringify(variables)}`, {
+    const response = await fetch(embedUrl, {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'X-Requested-With': 'XMLHttpRequest',
-        'Referer': 'https://www.instagram.com/',
-        'Authority': 'www.instagram.com'
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       }
     });
 
     if (response.ok) {
       const data = await response.json();
-      return data?.data?.shortcode_media;
-    }
-  } catch (error) {
-    console.log("GraphQL method failed:", error.message);
-  }
-
-  // Method 2: Try the embed endpoint
-  try {
-    const embedUrl = `https://www.instagram.com/p/${shortcode}/embed/captioned/`;
-    const response = await fetch(embedUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-      }
-    });
-
-    if (response.ok) {
-      const html = await response.text();
+      console.log("oEmbed response:", data);
       
-      // Extract JSON data from HTML
-      const scriptMatch = html.match(/window\.__additionalDataLoaded\([^,]+,({.+})\);/);
-      if (scriptMatch) {
-        const jsonData = JSON.parse(scriptMatch[1]);
-        return jsonData?.graphql?.shortcode_media;
-      }
-
-      // Try alternative pattern
-      const altMatch = html.match(/window\._sharedData\s*=\s*({.+?});/);
-      if (altMatch) {
-        const sharedData = JSON.parse(altMatch[1]);
-        const media = sharedData?.entry_data?.PostPage?.[0]?.graphql?.shortcode_media;
-        return media;
-      }
-    }
-  } catch (error) {
-    console.log("Embed method failed:", error.message);
-  }
-
-  // Method 3: Try direct post URL scraping
-  try {
-    const postUrl = `https://www.instagram.com/p/${shortcode}/`;
-    const response = await fetch(postUrl, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.5',
-        'Accept-Encoding': 'gzip, deflate, br',
-        'Referer': 'https://www.google.com/'
-      }
-    });
-
-    if (response.ok) {
-      const html = await response.text();
-      
-      // Look for JSON data in script tags
-      const jsonRegex = /<script type="application\/ld\+json">(.+?)<\/script>/g;
-      let match;
-      while ((match = jsonRegex.exec(html)) !== null) {
-        try {
-          const jsonData = JSON.parse(match[1]);
-          if (jsonData.video?.contentUrl) {
-            return {
-              video_url: jsonData.video.contentUrl,
-              display_url: jsonData.image || jsonData.video.thumbnailUrl,
-              is_video: true
-            };
-          }
-          if (jsonData.image) {
-            return {
-              display_url: jsonData.image,
-              is_video: false
-            };
-          }
-        } catch (e) {
-          continue;
-        }
-      }
-
-      // Extract from meta tags
-      const videoMatch = html.match(/<meta property="og:video" content="([^"]+)"/);
-      const imageMatch = html.match(/<meta property="og:image" content="([^"]+)"/);
-      
-      if (videoMatch || imageMatch) {
+      if (data.thumbnail_url) {
         return {
-          video_url: videoMatch?.[1],
-          display_url: imageMatch?.[1] || videoMatch?.[1],
-          is_video: !!videoMatch?.[1]
+          display_url: data.thumbnail_url,
+          is_video: data.type === 'video',
+          title: data.title || '',
+          author_name: data.author_name || ''
         };
       }
     }
   } catch (error) {
+    console.log("oEmbed method failed:", error.message);
+  }
+
+  // Method 2: Try alternative scraping approach
+  try {
+    console.log("Trying direct Instagram page scraping...");
+    const postUrl = `https://www.instagram.com/p/${shortcode}/`;
+    
+    const response = await fetch(postUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 12_0 like Mac OS X) AppleWebKit/604.1.38 (KHTML, like Gecko) Version/12.0 Mobile/15A372 Safari/604.1',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none'
+      }
+    });
+
+    if (response.ok) {
+      const html = await response.text();
+      console.log("HTML response length:", html.length);
+      
+      // Extract media URLs from meta tags
+      const videoUrlMatch = html.match(/<meta property="og:video:secure_url" content="([^"]+)"/);
+      const videoMatch = html.match(/<meta property="og:video" content="([^"]+)"/);
+      const imageMatch = html.match(/<meta property="og:image" content="([^"]+)"/);
+      
+      console.log("Video URL found:", !!videoUrlMatch);
+      console.log("Video found:", !!videoMatch);  
+      console.log("Image found:", !!imageMatch);
+
+      if (videoUrlMatch || videoMatch) {
+        return {
+          video_url: videoUrlMatch?.[1] || videoMatch?.[1],
+          display_url: imageMatch?.[1],
+          is_video: true
+        };
+      } else if (imageMatch) {
+        return {
+          display_url: imageMatch[1],
+          is_video: false
+        };
+      }
+
+      // Try JSON-LD extraction
+      const jsonLdMatch = html.match(/<script type="application\/ld\+json"[^>]*>([^<]+)<\/script>/g);
+      if (jsonLdMatch) {
+        for (const jsonScript of jsonLdMatch) {
+          try {
+            const jsonContent = jsonScript.match(/>([^<]+)</)?.[1];
+            if (jsonContent) {
+              const jsonData = JSON.parse(jsonContent);
+              console.log("Found JSON-LD data:", jsonData);
+              
+              if (jsonData.video?.contentUrl) {
+                return {
+                  video_url: jsonData.video.contentUrl,
+                  display_url: jsonData.video.thumbnailUrl || jsonData.image,
+                  is_video: true
+                };
+              }
+              if (jsonData.image) {
+                return {
+                  display_url: Array.isArray(jsonData.image) ? jsonData.image[0] : jsonData.image,
+                  is_video: false
+                };
+              }
+            }
+          } catch (e) {
+            console.log("JSON-LD parsing error:", e.message);
+          }
+        }
+      }
+    }
+  } catch (error) {
     console.log("Direct scraping failed:", error.message);
+  }
+
+  // Method 3: Use working third-party API as fallback
+  try {
+    console.log("Trying third-party API fallback...");
+    const apiUrl = `https://instagram-scraper-api2.p.rapidapi.com/v1/post_info?code_or_id_or_url=${shortcode}`;
+    
+    const response = await fetch(apiUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+
+    if (response.ok) {
+      const data = await response.json();
+      console.log("Third-party API response:", data);
+      
+      if (data.data?.video_url || data.data?.image_url) {
+        return {
+          video_url: data.data.video_url,
+          display_url: data.data.image_url || data.data.video_url,
+          is_video: !!data.data.video_url
+        };
+      }
+    }
+  } catch (error) {
+    console.log("Third-party API failed:", error.message);
   }
 
   return null;
@@ -179,25 +198,30 @@ serve(async (req: Request) => {
     
     if (!mediaInfo) {
       return new Response(
-        JSON.stringify({ error: "Could not extract media information from Instagram. The post might be private or unavailable." }),
+        JSON.stringify({ 
+          error: "Could not extract media from Instagram. This might be due to:",
+          reasons: [
+            "The post is private or unavailable",
+            "Instagram has blocked the request",  
+            "The post URL format is not supported"
+          ],
+          suggestion: "Try with a different Instagram post URL or check if the post is public"
+        }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 404 }
       );
     }
 
-    console.log("Media info extracted:", mediaInfo);
+    console.log("Successfully extracted media info:", mediaInfo);
 
     // Determine download URL based on media type and user preference
     let downloadUrl: string;
-    let isVideo = false;
+    let isVideo = mediaInfo.is_video;
 
-    if (mediaInfo.is_video || mediaInfo.video_url) {
-      isVideo = true;
-      downloadUrl = mediaInfo.video_url || mediaInfo.display_url;
-    } else {
+    if (isVideo && mediaInfo.video_url) {
+      downloadUrl = mediaInfo.video_url;
+    } else if (mediaInfo.display_url) {
       downloadUrl = mediaInfo.display_url;
-    }
-
-    if (!downloadUrl) {
+    } else {
       return new Response(
         JSON.stringify({ error: "No downloadable media found in this Instagram post." }),
         { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 404 }
@@ -216,7 +240,7 @@ serve(async (req: Request) => {
     const fileExtension = saveType === "audio" ? "mp4" : (isVideo ? "mp4" : "jpg");
     const fileName = `instagram_${shortcode}.${fileExtension}`;
 
-    console.log(`Successfully extracted media: ${downloadUrl}`);
+    console.log(`Successfully processed. Download URL: ${downloadUrl}`);
 
     return new Response(
       JSON.stringify({
@@ -227,7 +251,8 @@ serve(async (req: Request) => {
           ? "Video download ready! Use a video-to-audio converter for audio extraction."
           : "Download ready!",
         mediaType: isVideo ? "video" : "image",
-        shortcode
+        shortcode,
+        extractedFrom: mediaInfo.author_name || "Instagram"
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 200 }
     );
@@ -237,7 +262,8 @@ serve(async (req: Request) => {
     return new Response(
       JSON.stringify({ 
         error: "Failed to process Instagram URL",
-        details: error.message
+        details: error.message,
+        timestamp: new Date().toISOString()
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" }, status: 500 }
     );
